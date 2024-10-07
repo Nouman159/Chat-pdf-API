@@ -1,0 +1,28 @@
+{
+  "name": "chatpdf-api",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "nodemon index",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "axios": "^1.7.7",
+    "connect-mongo": "^5.1.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "mongoose": "^8.6.4",
+    "multer": "^1.4.5-lts.1",
+    "openai": "^4.66.1",
+    "pdf-image": "^2.0.0",
+    "pdf-parse": "^1.1.1",
+    "tesseract.js": "^5.1.1",
+    "uuid": "^10.0.0"
+  }
+}
