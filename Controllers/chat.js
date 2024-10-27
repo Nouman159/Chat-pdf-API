@@ -4,9 +4,8 @@ const pdf = require('pdf-parse');
 const { v4: uuidv4 } = require('uuid');
 const ExtractedText = require('../Models/text');
 
-const maxFileSize = 75 * 1024 * 1024; // 75 MB
-
-const maxEmbeddingTokens = 2048; // Example token limit for embeddings
+const maxFileSize = 75 * 1024 * 1024;
+const maxEmbeddingTokens = 2048;
 
 const getModelName = () => {
     if (process.env.USE_GPT_4o === 'true') {
@@ -14,7 +13,7 @@ const getModelName = () => {
     } else if (process.env.USE_MINI_MODEL === 'true') {
         return 'gpt-4o-mini';
     } else {
-        return 'gpt-4'; // Default to ChatGPT-4 if no flags are set
+        return 'gpt-4';
     }
 };
 
@@ -28,10 +27,9 @@ const getEmbeddings = async (text) => {
             'Content-Type': 'application/json'
         }
     });
-    return response.data.data[0].embedding; // Return the generated embedding
+    return response.data.data[0].embedding;
 };
 
-// Function to split text into chunks
 const splitTextIntoChunks = (text, maxTokens) => {
     const words = text.split(' ');
     let chunks = [];
@@ -39,18 +37,17 @@ const splitTextIntoChunks = (text, maxTokens) => {
 
     for (const word of words) {
         const nextChunk = currentChunk ? currentChunk + ' ' + word : word;
-        // Estimate token count; you can adjust this logic based on your requirements
         const estimatedTokens = nextChunk.length / 4; // Rough estimation: 1 token ≈ 4 characters
         if (estimatedTokens <= maxTokens) {
             currentChunk = nextChunk;
         } else {
             chunks.push(currentChunk);
-            currentChunk = word; // Start a new chunk with the current word
+            currentChunk = word;
         }
     }
 
     if (currentChunk) {
-        chunks.push(currentChunk); // Push the last chunk if not empty
+        chunks.push(currentChunk);
     }
 
     return chunks;
@@ -63,12 +60,11 @@ const uploadFiles = async (req, res) => {
 
     let extractedTexts = [];
     const userID = uuidv4();
-    let allExtractedText = ''; // Variable to hold combined extracted text
+    let allExtractedText = '';
 
     for (const file of req.files) {
         const fileSize = fs.statSync(file.path).size;
 
-        // Check file size limit
         if (fileSize > maxFileSize) {
             return res.status(400).json({ message: 'File too large' });
         }
@@ -76,24 +72,20 @@ const uploadFiles = async (req, res) => {
         const dataBuffer = fs.readFileSync(file.path);
 
         try {
-            const data = await pdf(dataBuffer, { max: 0 }); // Extract text only
+            const data = await pdf(dataBuffer, { max: 0 });
 
             if (!data.text || data.text.trim() === '') {
                 console.warn('No text found in the PDF file. It might be image-based.');
-                continue; // Skip this file if no text is found
+                continue;
             }
 
-            // Store the extracted text for suggested question generation
-            allExtractedText += data.text + '\n'; // Append each file's text
+            allExtractedText += data.text + '\n';
 
-            // Split extracted text into chunks
             const textChunks = splitTextIntoChunks(data.text, maxEmbeddingTokens);
-            const embeddingPromises = textChunks.map(chunk => getEmbeddings(chunk)); // Generate embeddings for each chunk
+            const embeddingPromises = textChunks.map(chunk => getEmbeddings(chunk));
 
-            // Wait for all embeddings to be generated
             const embeddings = await Promise.all(embeddingPromises);
 
-            // Save extracted text and embeddings
             textChunks.forEach((chunk, index) => {
                 extractedTexts.push({ text: chunk, embeddings: embeddings[index] });
             });
@@ -116,14 +108,12 @@ const uploadFiles = async (req, res) => {
 
     try {
         await Promise.all(savePromises);
-
-        // Generate a logical suggested question based on the combined extracted text
-        const suggestedQuestion = await generateSuggestedQuestion(allExtractedText); // Use the combined text
+        const suggestedQuestion = await generateSuggestedQuestion(allExtractedText);
 
         res.status(200).json({
             message: 'Files uploaded and text extracted successfully',
             userID,
-            suggestedQuestion // Include suggested question
+            suggestedQuestion
         });
     } catch (error) {
         console.error('Error saving extracted texts to MongoDB:', error);
@@ -132,13 +122,12 @@ const uploadFiles = async (req, res) => {
 };
 
 
-// Function to generate a suggested question using OpenAI
 const generateSuggestedQuestion = async (extractedText) => {
     const prompt = `Based on the following text, suggest a first question to ask about it:\n\n${extractedText}\n\nSuggested Question:`;
 
     try {
         const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-            model: getModelName(), // Use the model defined in your getModelName function
+            model: getModelName(),
             messages: [{ role: 'user', content: prompt }]
         }, {
             headers: {
@@ -147,14 +136,13 @@ const generateSuggestedQuestion = async (extractedText) => {
             }
         });
 
-        return response.data.choices[0].message.content.trim(); // Return the generated question
+        return response.data.choices[0].message.content.trim();
     } catch (error) {
         console.error('Error generating suggested question:', error);
-        return 'What information does the document provide?'; // Fallback question
+        return 'What information does the document provide?';
     }
 };
 
-// Cosine similarity function to compare vectors
 const cosineSimilarity = (vecA, vecB) => {
     const dotProduct = vecA.reduce((sum, a, idx) => sum + a * vecB[idx], 0);
     const magnitudeA = Math.sqrt(vecA.reduce((sum, a) => sum + a * a, 0));
@@ -162,7 +150,6 @@ const cosineSimilarity = (vecA, vecB) => {
     return dotProduct / (magnitudeA * magnitudeB);
 };
 
-// Ask question and retrieve answer from OpenAI API
 const askQuestion = async (req, res) => {
     const userQuestion = req.body.question;
     const questionEmbedding = await getEmbeddings(userQuestion);
@@ -172,16 +159,15 @@ const askQuestion = async (req, res) => {
         return res.status(400).json({ message: 'No extracted text available' });
     }
 
-    // Sort and find the most relevant texts using cosine similarity
     const relevantTexts = extractedTexts
         .map(doc => ({
             text: doc.text,
             similarity: cosineSimilarity(questionEmbedding, doc.embeddings)
         }))
-        .sort((a, b) => b.similarity - a.similarity) // Sort by similarity
-        .slice(0, 3) // Get top 3 relevant texts
+        .sort((a, b) => b.similarity - a.similarity)
+        .slice(0, 3)
         .map(doc => doc.text)
-        .join('\n'); // Combine the top relevant texts
+        .join('\n');
 
     const modelName = getModelName();
     console.log(modelName)
