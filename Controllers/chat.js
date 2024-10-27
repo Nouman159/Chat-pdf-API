@@ -95,7 +95,6 @@ const uploadFiles = async (req, res) => {
             return res.status(500).json({ message: 'Error processing PDF file' });
         }
     }
-    console.log(extractedTexts)
 
     const savePromises = extractedTexts.map(({ text, embeddings }) => {
         const extractedText = new ExtractedText({
@@ -170,7 +169,6 @@ const askQuestion = async (req, res) => {
         .join('\n');
 
     const modelName = getModelName();
-    console.log(modelName)
     try {
         const response = await axios.post('https://api.openai.com/v1/chat/completions', {
             model: modelName,
